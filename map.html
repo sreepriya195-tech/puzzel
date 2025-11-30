@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Map Hunt Race — Single Page</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+<script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
+<style>
+ body {
+    margin:0;
+    padding:0;
+    background: url("https://mir-s3-cdn-cf.behance.net/project_modules/fs/e1c5cb28858253.55d5b428f0621.png") no-repeat center center fixed;
+    background-size: cover;
+    font-family:'Orbitron', sans-serif;
+    color:#092d66;
+ }
+
+ /* ------------------ WELCOME PAGE ------------------ */
+ #welcomePage {
+    height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+ }
+
+ .welcome-box{
+    text-align:center;
+    padding:40px;
+    width:80%;
+    max-width:500px;
+    background:#fafafb;
+    border-radius:20px;
+    border:2px solid #0c41de;
+    box-shadow:0 0 35px #09a2fa;
+ }
+
+ .start-btn{
+    margin-top:25px;
+    padding:18px 25px;
+    font-size:20px;
+    border:none;
+    border-radius:12px;
+    cursor:pointer;
+    background:#3B5BFF;
+    color:white;
+    font-weight:bold;
+    box-shadow:0 0 15px #3B5BFF;
+ }
+
+ /* ------------------ GAME PAGE ------------------ */
+ #gamePage {
+    display:none;
+    padding:30px;
+ }
+
+ .container{
+    display:flex;
+    gap:25px;
+    justify-content:center;
+    align-items:stretch;
+ }
+
+ .panel {
+    flex: 1;
+    max-width: 500px;
+    height: 73vh;
+    padding: 40px;
+    border-radius: 22px;
+    border: 4px solid #2b59c5;
+    background:#ffffff;
+    box-shadow: 0 0 35px #356cee;
+    overflow-y: auto;
+}
+
+ /* MAP SIZE */
+ #map{
+    flex:1;
+    max-width:500px;
+    height:70vh;
+    min-height:620px;
+    border-radius:22px;
+    border:4px solid #1e4dc7;
+    box-shadow:0 0 35px #5B8CFF;
+ }
+
+ .panel h1 {
+    margin-top:0;
+    font-size:35px;
+    color:#0d3e8e;
+   
+ }
+
+ #taskTitle span {
+    font-size:28px;
+    color:#d41818;
+    text-shadow:0 0 12px #ffffff;
+    font-weight:bold;
+ }
+
+ /* 🔴 TIMER IN RED */
+ #timer {
+    color:#ff4040;
+    font-weight:bold;
+    font-size:28px;
+    text-shadow:0 0 10px #ff0000;
+ }
+
+ #startBtn {
+    margin-top:25px;
+    width:100%;
+    padding:18px;
+    font-size:25px;
+    border:none;
+    border-radius:16px;
+    cursor:pointer;
+    background:#3B5BFF;;
+    color:white;
+    font-weight:bold;
+    box-shadow:0 0 18px #4506cd;
+ }
+
+ #markBtn, #nextBtn {
+    margin-top:15px;
+    width:100%;
+    padding:15px;
+    font-size:25px;
+    border:none;
+    border-radius:12px;
+    font-weight:bold;
+    background:#2781e7;
+    box-shadow:0 0 18px #4506cd;
+    color:white;
+     
+    display:none;
+ }
+
+ #status{
+    margin-top:25px;
+    font-size:18px;
+ }
+</style>
+</head>
+
+<body>
+
+<!-- ------------------ WELCOME SCREEN ------------------ -->
+<div id="welcomePage">
+    <div class="welcome-box">
+        <h1>🌍 Map Hunt Race</h1>
+        <p>Find the location. Beat the timer. Win the challenge!</p>
+        <button class="start-btn" onclick="startGame()">Let's Begin ▶</button>
+    </div>
+</div>
+
+<!-- ------------------ GAME PAGE ------------------ -->
+<div id="gamePage">
+<div class="container">
+
+ <div class="panel">
+
+  <h1>Map Hunt Race 🗺 </h1>
+  <p>Solve clues, find locations, and beat the timer!</p>
+
+  <h2 id="taskTitle"><span>Clue: —</span></h2>
+
+  <h3>Level: <span id="level">0</span> / 5</h3>
+
+  <!-- 🔴 TIMER IS RED NOW -->
+  <h3>Time Taken: <span id="timer">00:00</span></h3>
+
+  <h3>Tolerance: 1000 meters</h3>
+
+  <button id="startBtn" onclick="startRace()">Start Race</button>
+  <button id="markBtn" onclick="markAnswer()">Mark This Place</button>
+  <button id="nextBtn" onclick="nextLevel()">Next Level ➜</button>
+
+  <h3 id="status">Press Start to begin.</h3>
+ </div>
+
+ <div id="map"></div>
+
+</div>
+</div>
+
+<script>
+function startGame(){
+    document.getElementById("welcomePage").style.display = "none";
+    document.getElementById("gamePage").style.display = "block";
+    setTimeout(() => map.invalidateSize(), 400);
+}
+
+/* ---------------- GAME DATA ---------------- */
+const tasks = [
+ { title: "A white marble wonder in Agra", lat: 27.1751, lng: 78.0421 },
+ { title: "The capital city of India", lat: 28.6139, lng: 77.2090 },
+ { title: "A famous iron monument in Paris", lat: 48.8584, lng: 2.2945 },
+ { title: "Japan's most iconic volcanic mountain", lat: 35.3606, lng: 138.7274 },
+ { title: "An arts building with sail-like design", lat: -33.8568, lng: 151.2153 }
+];
+
+let current = 0;
+let tolerance = 1000;
+let startTime = null;
+let timerInterval = null;
+
+/* ---------------- MAP ---------------- */
+const map = L.map('map').setView([20, 0], 2);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+   maxZoom: 19
+}).addTo(map);
+
+L.Control.geocoder().addTo(map);
+
+let marker = L.marker([20, 0], { draggable: true }).addTo(map);
+
+map.on('click', e => marker.setLatLng(e.latlng));
+
+/* ---------------- GAME FUNCTIONS ---------------- */
+function startRace() {
+  current = 0;
+  loadTask();
+  startTime = Date.now();
+  startTimer();
+
+  document.getElementById('status').innerHTML = "Race Started!";
+  document.getElementById('startBtn').style.display = "none";
+  document.getElementById('markBtn').style.display = "block";
+
+  setTimeout(() => map.invalidateSize(), 400);
+}
+
+function loadTask() {
+  const t = tasks[current];
+
+  document.getElementById('taskTitle').innerHTML = `<span>Clue: ${t.title}</span>`;
+  document.getElementById('level').innerHTML = current + 1;
+
+  document.getElementById('nextBtn').style.display = "none";
+  document.getElementById('markBtn').style.display = "block";
+
+  map.flyTo([t.lat, t.lng], 4, { animate: true, duration: 1.0 });
+}
+
+function startTimer() {
+  if (timerInterval) clearInterval(timerInterval);
+
+  timerInterval = setInterval(() => {
+    let elapsed = Math.floor((Date.now() - startTime) / 1000);
+    let m = String(Math.floor(elapsed / 60)).padStart(2,"0");
+    let s = String(elapsed % 60).padStart(2,"0");
+    document.getElementById('timer').innerHTML = `${m}:${s}`;
+  }, 1000);
+}
+
+function markAnswer() {
+  const user = marker.getLatLng();
+  const t = tasks[current];
+
+  const d = haversine(user.lat, user.lng, t.lat, t.lng);
+
+  if (d <= tolerance) {
+    document.getElementById('status').innerHTML =
+      `Correct! Only ${Math.round(d)}m away.`;
+
+    document.getElementById('markBtn').style.display = "none";
+    document.getElementById('nextBtn').style.display = "block";
+
+    L.circle([t.lat, t.lng], {
+      radius: 200,
+      color: '#21f05f',
+      fill: false
+    }).addTo(map);
+
+  } else {
+    document.getElementById('status').innerHTML =
+      `Wrong! You are ${Math.round(d)}m away.`;
+  }
+}
+
+function nextLevel() {
+  current++;
+
+  if (current >= tasks.length) {
+    document.getElementById('status').innerHTML = "🎉 All Levels Completed!";
+    document.getElementById('taskTitle').innerHTML = "<span>Completed ✔</span>";
+    document.getElementById('nextBtn').style.display = "none";
+    clearInterval(timerInterval);
+    return;
+  }
+
+  loadTask();
+}
+
+/* ---------------- HAVERSINE ---------------- */
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2-lat1) * Math.PI/180;
+  const dLon = (lon2-lon1) * Math.PI/180;
+
+  const a =
+    Math.sin(dLat/2)**2 +
+    Math.cos(lat1*Math.PI/180) *
+    Math.cos(lat2*Math.PI/180) *
+    Math.sin(dLon/2)**2;
+
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+</script>
+
+</body>
+</html>
